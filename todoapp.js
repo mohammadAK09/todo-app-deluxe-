@@ -24,24 +24,54 @@ function saveTasks(tasks) {
 
 // --- Display Function ---
 
-function printTasks(tasks, filter = 'all') {
-    let count = 0;
-    console.log(`\n📋 --- ${filter.toUpperCase()} TASKS ---`);
+function printTasks(tasksList, filter) {
+    // Keep your header printing logic here...
+    console.log("\n📋 --- ALL TASKS ---");
     
-    for (const task of tasks) {
-        if (filter === 'completed' && !task.completed) continue;
-        if (filter === 'pending' && task.completed) continue;
+    // Define our ANSI color codes
+    const RESET = "\x1b[0m";
+    const GREEN = "\x1b[32m";
+    const RED = "\x1b[31m";
 
-        console.log(`[ID: ${task.id}]  "${task.text}"  - ${task.completed ? " Completed" : " Pending"}`);
-        count++;
+    // Filter tasks based on your filter logic
+    const filtered = tasksList.filter(t => {
+        if (filter === 'completed') return t.completed;
+        if (filter === 'pending') return !t.completed;
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        console.log("No tasks found.");
+        return;
     }
 
-    if (count === 0) {
-        console.log(`No ${filter !== 'all' ? filter : ''} tasks found.`);
-    }
-    console.log("-------------------------\n");
+    filtered.forEach(t => {
+        // 1. Format the ID so it also has consistent spacing (e.g., [ID: 1  ])
+        const idStr = ` ${t.id}`.padEnd(6);
+
+        // 2. Format the task text so it's always exactly 45 characters wide
+        // Wrap the task in quotes like you had, but pad it nicely
+        const formattedTask = formatTaskText(`"${t.text}"`, 45);
+
+        // 3. Apply color to the status
+        const statusColor = t.completed ? GREEN : RED;
+        const statusText = t.completed ? "Completed" : "Pending";
+        const coloredStatus = `${statusColor}${statusText}${RESET}`;
+
+        // 4. Print the aligned line
+        console.log(`${idStr} ${formattedTask}  -  ${coloredStatus}`);
+    });
+    
+    console.log("---------------------------------------");
 }
 
+// Helper function to handle text truncation and padding
+function formatTaskText(text, length = 60) {
+    if (text.length > length) {
+        return text.substring(0, length - 3).concat('...').padEnd(length);
+    }
+    return text.padEnd(length);
+}
 // --- Help / Usage Guide ---
 
 function printUsage() {

@@ -2,9 +2,9 @@
   "name": "todo-app",
   "version": "1.0.0",
   "description": "My todo CLI",
-  "main": "todo.js",
+  "main": "todoapp.js",
   "bin": {
-    "todo": "./todo.js"
+    "todo": "./todoapp.js"
   },
 
   "dependencies": {
