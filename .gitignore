@@ -1,5 +1,5 @@
-build
-build/*
-.env
+build/
 
-./db/*
+.env
+tasks.json
+node_modules/
