@@ -3,6 +3,9 @@ const fs = require('fs');
 const path = require('path');
 const FILE_PATH = path.join(__dirname, 'tasks.json');
 
+// Get the actual command name used to run this script (e.g., "todo" or "todo.js")
+const BIN_NAME = path.basename(process.argv[1], '.js') === 'todoapp' ? 'todo' : path.basename(process.argv[1]);
+
 // --- Helper Functions to Load and Save ---
 
 function loadTasks() {
@@ -13,7 +16,7 @@ function loadTasks() {
         const rawData = fs.readFileSync(FILE_PATH, 'utf-8');
         return JSON.parse(rawData);
     } catch (error) {
-        console.log("⚠️ Error reading saved tasks, starting fresh.");
+        console.error("⚠️ Error reading saved tasks, starting fresh.");
         return [];
     }
 }
@@ -25,15 +28,12 @@ function saveTasks(tasks) {
 // --- Display Function ---
 
 function printTasks(tasksList, filter) {
-    // Keep your header printing logic here...
     console.log("\n📋 --- ALL TASKS ---");
     
-    // Define our ANSI color codes
     const RESET = "\x1b[0m";
     const GREEN = "\x1b[32m";
     const RED = "\x1b[31m";
 
-    // Filter tasks based on your filter logic
     const filtered = tasksList.filter(t => {
         if (filter === 'completed') return t.completed;
         if (filter === 'pending') return !t.completed;
@@ -46,43 +46,36 @@ function printTasks(tasksList, filter) {
     }
 
     filtered.forEach(t => {
-        // 1. Format the ID so it also has consistent spacing (e.g., [ID: 1  ])
         const idStr = ` ${t.id}`.padEnd(6);
-
-        // 2. Format the task text so it's always exactly 45 characters wide
-        // Wrap the task in quotes like you had, but pad it nicely
         const formattedTask = formatTaskText(`"${t.text}"`, 45);
-
-        // 3. Apply color to the status
         const statusColor = t.completed ? GREEN : RED;
         const statusText = t.completed ? "Completed" : "Pending";
         const coloredStatus = `${statusColor}${statusText}${RESET}`;
 
-        // 4. Print the aligned line
         console.log(`${idStr} ${formattedTask}  -  ${coloredStatus}`);
     });
     
     console.log("---------------------------------------");
 }
 
-// Helper function to handle text truncation and padding
 function formatTaskText(text, length = 60) {
     if (text.length > length) {
         return text.substring(0, length - 3).concat('...').padEnd(length);
     }
     return text.padEnd(length);
 }
+
 // --- Help / Usage Guide ---
 
 function printUsage() {
     console.log(`
 💡 Usage Guide:
-  node todo.js add "Task Name"      - Add a new pending task
-  node todo.js list                 - List all tasks
-  node todo.js list completed       - List only completed tasks
-  node todo.js list pending         - List only pending tasks
-  node todo.js delete <id>          - Delete a task by its ID
-  node todo.js toggle <id>          - Toggle completion status of a task
+  ${BIN_NAME} add "Task Name"       - Add a new pending task
+  ${BIN_NAME} list                  - List all tasks
+  ${BIN_NAME} list completed        - List only completed tasks
+  ${BIN_NAME} list pending          - List only pending tasks
+  ${BIN_NAME} delete <id>           - Delete a task by its ID
+  ${BIN_NAME} toggle <id>           - Toggle completion status of a task
     `);
 }
 
@@ -90,25 +83,27 @@ function printUsage() {
 
 const tasks = loadTasks();
 
-// process.argv[0] is 'node'
-// process.argv[1] is 'todo.js'
-// process.argv[2] is our command (add, list, delete, toggle)
 const command = process.argv[2];
 const argument = process.argv[3];
-const subArgument = process.argv[4];
+
+// Support standard help flags globally
+if (!command || command === '--help' || command === '-h') {
+    printUsage();
+    process.exit(0);
+}
 
 switch (command) {
     case 'add':
         if (!argument) {
-            console.log("❌ Error: Please specify a task name. E.g., node todo.js add \"Buy milk\"");
-            break;
+            console.error(`❌ Error: Please specify a task name. E.g., ${BIN_NAME} add "Buy milk"`);
+            process.exit(1); // Exit with error
         }
         
         const nextId = tasks.length > 0 ? Math.max(...tasks.map(t => t.id)) + 1 : 1;
         tasks.push({
             id: nextId,
             text: argument,
-            completed: false // default new tasks to pending
+            completed: false
         });
         
         saveTasks(tasks);
@@ -116,20 +111,20 @@ switch (command) {
         break;
 
     case 'list':
-        // Supports: 'list', 'list completed', 'list pending'
         const filter = argument ? argument.toLowerCase() : 'all';
         if (['all', 'completed', 'pending'].includes(filter)) {
             printTasks(tasks, filter);
         } else {
-            console.log("❌ Error: Invalid filter. Use 'completed' or 'pending'.");
+            console.error("❌ Error: Invalid filter. Use 'completed' or 'pending'.");
+            process.exit(1);
         }
         break;
 
     case 'delete':
         const deleteId = Number(argument);
         if (isNaN(deleteId)) {
-            console.log("❌ Error: Please provide a valid task ID to delete.");
-            break;
+            console.error("❌ Error: Please provide a valid task ID to delete.");
+            process.exit(1);
         }
 
         const deleteIndex = tasks.findIndex(t => t.id === deleteId);
@@ -138,27 +133,31 @@ switch (command) {
             saveTasks(tasks);
             console.log(`\n🗑️ Deleted task: "${removed[0].text}"`);
         } else {
-            console.log(`❌ Error: Task ID ${deleteId} not found.`);
+            console.error(`❌ Error: Task ID ${deleteId} not found.`);
+            process.exit(1);
         }
         break;
 
     case 'toggle':
         const toggleId = Number(argument);
         if (isNaN(toggleId)) {
-            console.log("❌ Error: Please provide a valid task ID to toggle.");
-            break;
+            console.error("❌ Error: Please provide a valid task ID to toggle.");
+            process.exit(1);
         }
 
         const taskToToggle = tasks.find(t => t.id === toggleId);
         if (taskToToggle) {
             taskToToggle.completed = !taskToToggle.completed;
             saveTasks(tasks);
-            console.log(`\n🔄 Status updated for "${taskToToggle.text}" to: ${taskToToggle.completed ? " Completed" : " Pending"}`);
+            console.log(`\n🔄 Status updated for "${taskToToggle.text}" to: ${taskToToggle.completed ? "Completed" : "Pending"}`);
         } else {
-            console.log(`❌ Error: Task ID ${toggleId} not found.`);
+            console.error(`❌ Error: Task ID ${toggleId} not found.`);
+            process.exit(1);
         }
         break;
 
     default:
+        console.error(`❌ Error: Unknown command "${command}"`);
         printUsage();
+        process.exit(1);
 }
