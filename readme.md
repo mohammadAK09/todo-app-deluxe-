@@ -9,7 +9,7 @@ Make sure you have [Node.js](https://nodejs.org/) installed, then follow these s
 ### necessary steps before working:
 
 ```bash
-* if you downloaded the exe file you dont need the steps start it with : .\todo.exe
+* if you downloaded the latest realsed app you can open it its downloaded file by opening the terminal there 
 1- download the app on you terminal by **npm install -g git+https://github.com/mohammadAK09/todo-app.git** or **git clone [https://github.com/mohammadAK09/todo-app.git](https://github.com/mohammadAK09/todo-app.git)**
 2- cd todo-app
 3- download npm : npm install
