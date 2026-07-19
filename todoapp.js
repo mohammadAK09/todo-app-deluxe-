@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 const fs = require('fs');
 const path = require('path');
-const FILE_PATH = path.join(__dirname, 'tasks.json');
+
+// process.cwd() gets the real folder where the user is currently running the .exe from
+const FILE_PATH = path.join(process.cwd(), 'tasks.json');
 
 // Get the actual command name used to run this script (e.g., "todo" or "todo.js")
 const BIN_NAME = path.basename(process.argv[1], '.js') === 'todoapp' ? 'todo' : path.basename(process.argv[1]);
