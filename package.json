@@ -6,8 +6,8 @@
   "bin": {
     "todo": "./todoapp.js"
   },
-
   "dependencies": {
+    "@seald-io/nedb": "^4.1.2",
     "prompt-sync": "^4.2.0"
   }
 }

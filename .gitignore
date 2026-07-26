@@ -1,5 +1,6 @@
 build/
-
+todo.db
+tasks.json.bak
 .env
 tasks.json
 node_modules/
