@@ -4,9 +4,9 @@ const path = require('path');
 const Datastore = require('@seald-io/nedb');
 
 // ============================================================================
-// 1. DATABASE & INDEX SETUP (NoSQL for low RAM usage)
+// 1. DATABASE & INDEX SETUP (Low RAM footprint)
 // ============================================================================
-// process.cwd() ensures todo.db is stored in the folder where the user executes the command
+// process.cwd() ensures todo.db is saved in the directory where the user executes the command
 const DB_PATH = path.join(process.cwd(), 'todo.db');
 const OLD_JSON_PATH = path.join(process.cwd(), 'tasks.json');
 
@@ -15,8 +15,8 @@ const db = new Datastore({
     autoload: true 
 });
 
-// NEW CHANGE: B-Tree Index on 'id' guarantees O(1) / O(log N) lookup speed
-// fetching a single ID loads ONLY that task from disk into RAM, not the full dataset.
+// B-Tree / Tree index on 'id' guarantees O(log N) fast lookups.
+// Fetching a single ID loads ONLY that task from disk into RAM.
 db.ensureIndex({ fieldName: 'id', unique: true });
 
 const BIN_NAME = path.basename(process.argv[1], '.js') === 'todoapp' ? 'todo' : path.basename(process.argv[1]);
@@ -44,17 +44,16 @@ function migrateLegacyJsonData(callback) {
                     id: task.id,
                     text: task.text,
                     completed: task.completed || false,
-                    // NEW TIMESTAMPS: Default missing values for old records
                     createdAt: task.createdAt || migrationDate,
                     updatedAt: task.updatedAt || null,
                     deletedAt: task.deletedAt || null
                 };
 
-                // Upsert to avoid duplicate key errors if partially migrated
+                // Upsert prevents duplicate key errors if re-run
                 db.update({ id: doc.id }, doc, { upsert: true }, () => {
                     pendingInserts--;
                     if (pendingInserts === 0) {
-                        // Backup old file so migration only runs once
+                        // Rename legacy file to avoid repeating migration on future runs
                         fs.renameSync(OLD_JSON_PATH, path.join(process.cwd(), 'tasks.json.bak'));
                         console.log("✅ Migration complete! Original file backed up to tasks.json.bak.\n");
                         callback();
@@ -87,7 +86,8 @@ function printUsage() {
   ${BIN_NAME} list                  - List active tasks
   ${BIN_NAME} list completed        - List completed tasks
   ${BIN_NAME} list pending          - List pending tasks
-  ${BIN_NAME} get <id>              - Fetch task directly by ID (Loads only 1 record into RAM)
+  ${BIN_NAME} list deleted          - List soft-deleted tasks (Trash)
+  ${BIN_NAME} get <id>              - Fetch task directly by ID (Memory-efficient lookup)
   ${BIN_NAME} delete <id>           - Soft delete task by setting deletedAt timestamp
   ${BIN_NAME} toggle <id>           - Toggle completion status and set updatedAt timestamp
     `);
@@ -112,18 +112,17 @@ migrateLegacyJsonData(() => {
                 process.exit(1);
             }
 
-            // Find max ID to safely assign auto-increment ID
+            // Find highest ID to safely assign auto-increment ID
             db.find({}).sort({ id: -1 }).limit(1).exec((err, docs) => {
                 const nextId = docs.length > 0 ? docs[0].id + 1 : 1;
 
-                // NEW CHANGE: Full timestamp schema on task creation
                 const newTask = {
                     id: nextId,
                     text: argument,
                     completed: false,
                     createdAt: new Date().toISOString(),
                     updatedAt: null,
-                    deletedAt: null // Explicitly null when active
+                    deletedAt: null
                 };
 
                 db.insert(newTask, (err, doc) => {
@@ -137,7 +136,6 @@ migrateLegacyJsonData(() => {
             break;
         }
 
-        // NEW FEATURE: Fast, memory-efficient direct lookup by ID
         case 'get': {
             const fetchId = Number(argument);
             if (isNaN(fetchId)) {
@@ -145,10 +143,10 @@ migrateLegacyJsonData(() => {
                 process.exit(1);
             }
 
-            // Indexed query: Reads ONLY this single record from disk
+            // Indexed query: Reads ONLY this single record from disk into memory
             db.findOne({ id: fetchId, deletedAt: null }, (err, task) => {
                 if (task) {
-                    console.log("\n Task Details:");
+                    console.log("\n📌 Task Details:");
                     console.log(`  ID:         ${task.id}`);
                     console.log(`  Text:       "${task.text}"`);
                     console.log(`  Status:     ${task.completed ? "Completed" : "Pending"}`);
@@ -164,18 +162,29 @@ migrateLegacyJsonData(() => {
 
         case 'list': {
             const filter = argument ? argument.toLowerCase() : 'all';
-            if (!['all', 'completed', 'pending'].includes(filter)) {
-                console.error("❌ Error: Invalid filter. Use 'completed' or 'pending'.");
+            const validFilters = ['all', 'completed', 'pending', 'deleted'];
+
+            if (!validFilters.includes(filter)) {
+                console.error("❌ Error: Invalid filter. Use 'completed', 'pending', or 'deleted'.");
                 process.exit(1);
             }
 
-            // Build query object: Exclude soft-deleted tasks
-            const query = { deletedAt: null };
-            if (filter === 'completed') query.completed = true;
-            if (filter === 'pending') query.completed = false;
+            // Build query filter
+            let query = {};
+            if (filter === 'deleted') {
+                // $ne = Not Equal. Fetch documents where deletedAt is NOT null
+                query = { deletedAt: { $ne: null } };
+            } else {
+                // For active lists, ignore soft-deleted tasks
+                query.deletedAt = null;
+                if (filter === 'completed') query.completed = true;
+                if (filter === 'pending') query.completed = false;
+            }
 
             db.find(query).sort({ id: 1 }).exec((err, tasks) => {
-                console.log("\n📋 --- TASKS ---");
+                const headerText = filter === 'deleted' ? '🗑️ --- DELETED TASKS  ---' : '📋 --- TASKS ---';
+                console.log(`\n${headerText}`);
+
                 const RESET = "\x1b[0m";
                 const GREEN = "\x1b[32m";
                 const RED = "\x1b[31m";
@@ -186,12 +195,18 @@ migrateLegacyJsonData(() => {
                     tasks.forEach(task => {
                         const idStr = ` ${task.id}`.padEnd(6);
                         const formattedTask = formatTaskText(`"${task.text}"`, 35);
-                        const statusColor = task.completed ? GREEN : RED;
-                        const statusText = task.completed ? "Completed" : "Pending";
-                        const coloredStatus = `${statusColor}${statusText}${RESET}`;
-                        const dateStr = new Date(task.createdAt).toLocaleDateString();
+                        
+                        if (filter === 'deleted') {
+                            const deletedDate = new Date(task.deletedAt).toLocaleDateString();
+                            console.log(`${idStr} ${formattedTask}  -  ${RED}Deleted: ${deletedDate}${RESET}`);
+                        } else {
+                            const statusColor = task.completed ? GREEN : RED;
+                            const statusText = task.completed ? "Completed" : "Pending";
+                            const coloredStatus = `${statusColor}${statusText}${RESET}`;
+                            const dateStr = new Date(task.createdAt).toLocaleDateString();
 
-                        console.log(`${idStr} ${formattedTask}  -  ${coloredStatus}  (Created: ${dateStr})`);
+                            console.log(`${idStr} ${formattedTask}  -  ${coloredStatus}  (Created: ${dateStr})`);
+                        }
                     });
                 }
                 console.log("---------------------------------------");
@@ -199,7 +214,6 @@ migrateLegacyJsonData(() => {
             break;
         }
 
-        // NEW CHANGE: Soft Delete (sets deletedAt instead of removing from DB)
         case 'delete': {
             const deleteId = Number(argument);
             if (isNaN(deleteId)) {
@@ -207,6 +221,7 @@ migrateLegacyJsonData(() => {
                 process.exit(1);
             }
 
+            // Soft Delete: Sets timestamp on deletedAt instead of removing from DB
             db.update(
                 { id: deleteId, deletedAt: null },
                 { $set: { deletedAt: new Date().toISOString() } },
@@ -223,7 +238,6 @@ migrateLegacyJsonData(() => {
             break;
         }
 
-        // NEW CHANGE: Updates status AND sets updatedAt timestamp
         case 'toggle': {
             const toggleId = Number(argument);
             if (isNaN(toggleId)) {
