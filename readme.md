@@ -1,4 +1,4 @@
-# (task/todo list) application 
+# (task/todo list) application v0.1.3
 ## this is an app where you can add and delete tasks ,also indecate if the task is done or not 
  
 
