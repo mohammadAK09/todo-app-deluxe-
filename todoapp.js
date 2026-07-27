@@ -176,14 +176,12 @@ migrateLegacyJsonData(() => {
                 }
             }
 
-            // Input validation for indices
             if (start < 1) start = 1;
             if (end < start) {
                 console.error("❌ Error: 'end' index must be greater than or equal to 'start' index.");
                 process.exit(1);
             }
 
-            // Calculate offset and limit for NeDB
             const skipCount = start - 1;
             const limitCount = end - start + 1;
 
@@ -197,49 +195,74 @@ migrateLegacyJsonData(() => {
                 if (filter === 'pending') query.completed = false;
             }
 
-            // Execute query with skip() and limit() pagination
-            db.find(query)
-                .sort({ id: 1 })
-                .skip(skipCount)
-                .limit(limitCount)
-                .exec((err, tasks) => {
-                    if (err) {
-                        console.error("❌ Database query error:", err.message);
-                        process.exit(1);
-                    }
+            // Step 1: Count total matching records in DB
+            db.count(query, (err, totalCount) => {
+                if (err) {
+                    console.error("❌ Database query error:", err.message);
+                    process.exit(1);
+                }
 
-                    const headerText = filter === 'deleted' ? '🗑️ --- DELETED TASKS (TRASH) ---' : '📋 --- TASKS ---';
-                    console.log(`\n${headerText} (Showing ${start} to ${end})`);
+                // Step 2: Fetch the page slice
+                db.find(query)
+                    .sort({ id: 1 })
+                    .skip(skipCount)
+                    .limit(limitCount)
+                    .exec((err, tasks) => {
+                        if (err) {
+                            console.error("❌ Database query error:", err.message);
+                            process.exit(1);
+                        }
 
-                    const RESET = "\x1b[0m";
-                    const GREEN = "\x1b[32m";
-                    const RED = "\x1b[31m";
+                        const headerText = filter === 'deleted' ? '🗑️ --- DELETED TASKS (TRASH) ---' : '📋 --- TASKS ---';
+                        console.log(`\n${headerText}`);
 
-                    if (tasks.length === 0) {
-                        console.log("No tasks found in this range.");
-                    } else {
-                        tasks.forEach(task => {
-                            const idStr = ` ${task.id}`.padEnd(6);
-                            const formattedTask = formatTaskText(`"${task.text}"`, 35);
-                            
-                            if (filter === 'deleted') {
-                                const deletedDate = new Date(task.deletedAt).toLocaleDateString();
-                                console.log(`${idStr} ${formattedTask}  -  ${RED}Deleted: ${deletedDate}${RESET}`);
+                        const RESET = "\x1b[0m";
+                        const GREEN = "\x1b[32m";
+                        const RED = "\x1b[31m";
+                        const YELLOW = "\x1b[33m";
+
+                        if (tasks.length === 0) {
+                            console.log(`No tasks found in range ${start}-${end}. (Total matching: ${totalCount})`);
+                            console.log("---------------------------------------");
+                        } else {
+                            tasks.forEach(task => {
+                                const idStr = ` ${task.id}`.padEnd(6);
+                                const formattedTask = formatTaskText(`"${task.text}"`, 35);
+                                
+                                if (filter === 'deleted') {
+                                    const deletedDate = new Date(task.deletedAt).toLocaleDateString();
+                                    console.log(`${idStr} ${formattedTask}  -  ${RED}Deleted: ${deletedDate}${RESET}`);
+                                } else {
+                                    const statusColor = task.completed ? GREEN : RED;
+                                    const statusText = task.completed ? "Completed" : "Pending";
+                                    const coloredStatus = `${statusColor}${statusText}${RESET}`;
+                                    const dateStr = new Date(task.createdAt).toLocaleDateString();
+
+                                    console.log(`${idStr} ${formattedTask}  -  ${coloredStatus}  (Created: ${dateStr})`);
+                                }
+                            });
+
+                            console.log("---------------------------------------");
+
+                            // Calculate actual end item index
+                            const actualEnd = start + tasks.length - 1;
+                            const filterCmd = filter !== 'all' ? `${filter} ` : '';
+
+                            // Step 3: Print indicator if there are more tasks remaining
+                            if (totalCount > actualEnd) {
+                                const nextStart = actualEnd + 1;
+                                const nextEnd = nextStart + (limitCount - 1);
+
+                                console.log(`📊 Showing ${start}-${actualEnd} of ${totalCount} tasks.`);
+                                console.log(`${YELLOW}💡 More tasks available! Run '${BIN_NAME} list ${filterCmd}${nextStart} ${nextEnd}' to view next page.${RESET}`);
                             } else {
-                                const statusColor = task.completed ? GREEN : RED;
-                                const statusText = task.completed ? "Completed" : "Pending";
-                                const coloredStatus = `${statusColor}${statusText}${RESET}`;
-                                const dateStr = new Date(task.createdAt).toLocaleDateString();
-
-                                console.log(`${idStr} ${formattedTask}  -  ${coloredStatus}  (Created: ${dateStr})`);
+                                console.log(`✅ Showing ${start}-${actualEnd} of ${totalCount} tasks (End of list).`);
                             }
-                        });
-                    }
-                    console.log("---------------------------------------");
-                });
+                        }
+                    });
+            });
             break;
         }
-
         case 'delete': {
             const deleteId = Number(process.argv[3]);
             if (isNaN(deleteId)) {
