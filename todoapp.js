@@ -4,9 +4,8 @@ const path = require('path');
 const Datastore = require('@seald-io/nedb');
 
 // ============================================================================
-// 1. DATABASE & INDEX SETUP (Low RAM footprint)
+// 1. DATABASE & INDEX SETUP
 // ============================================================================
-// process.cwd() ensures todo.db is saved in the directory where the user executes the command
 const DB_PATH = path.join(process.cwd(), 'todo.db');
 const OLD_JSON_PATH = path.join(process.cwd(), 'tasks.json');
 
@@ -15,14 +14,12 @@ const db = new Datastore({
     autoload: true 
 });
 
-// B-Tree / Tree index on 'id' guarantees O(log N) fast lookups.
-// Fetching a single ID loads ONLY that task from disk into RAM.
 db.ensureIndex({ fieldName: 'id', unique: true });
 
 const BIN_NAME = path.basename(process.argv[1], '.js') === 'todoapp' ? 'todo' : path.basename(process.argv[1]);
 
 // ============================================================================
-// 2. AUTO-MIGRATION (Imports legacy tasks.json data automatically)
+// 2. AUTO-MIGRATION
 // ============================================================================
 function migrateLegacyJsonData(callback) {
     if (!fs.existsSync(OLD_JSON_PATH)) {
@@ -49,11 +46,9 @@ function migrateLegacyJsonData(callback) {
                     deletedAt: task.deletedAt || null
                 };
 
-                // Upsert prevents duplicate key errors if re-run
                 db.update({ id: doc.id }, doc, { upsert: true }, () => {
                     pendingInserts--;
                     if (pendingInserts === 0) {
-                        // Rename legacy file to avoid repeating migration on future runs
                         fs.renameSync(OLD_JSON_PATH, path.join(process.cwd(), 'tasks.json.bak'));
                         console.log("✅ Migration complete! Original file backed up to tasks.json.bak.\n");
                         callback();
@@ -82,14 +77,14 @@ function formatTaskText(text, length = 35) {
 function printUsage() {
     console.log(`
 💡 Usage Guide:
-  ${BIN_NAME} add "Task Name"       - Add a new task
-  ${BIN_NAME} list                  - List active tasks
-  ${BIN_NAME} list completed        - List completed tasks
-  ${BIN_NAME} list pending          - List pending tasks
-  ${BIN_NAME} list deleted          - List soft-deleted tasks (Trash)
-  ${BIN_NAME} get <id>              - Fetch task directly by ID (Memory-efficient lookup)
-  ${BIN_NAME} delete <id>           - Soft delete task by setting deletedAt timestamp
-  ${BIN_NAME} toggle <id>           - Toggle completion status and set updatedAt timestamp
+  ${BIN_NAME} add "Task Name"             - Add a new task
+  ${BIN_NAME} list                        - List first 10 active tasks (Default)
+  ${BIN_NAME} list <start> <end>          - List tasks in custom index range (e.g., ${BIN_NAME} list 5 15)
+  ${BIN_NAME} list <filter>               - List first 10 filtered tasks (completed, pending, deleted)
+  ${BIN_NAME} list <filter> <start> <end> - List filtered tasks in range (e.g., ${BIN_NAME} list pending 1 5)
+  ${BIN_NAME} get <id>                    - Fetch task directly by ID
+  ${BIN_NAME} delete <id>                 - Soft delete task by setting deletedAt timestamp
+  ${BIN_NAME} toggle <id>                 - Toggle completion status and set updatedAt timestamp
     `);
 }
 
@@ -98,7 +93,6 @@ function printUsage() {
 // ============================================================================
 migrateLegacyJsonData(() => {
     const command = process.argv[2];
-    const argument = process.argv[3];
 
     if (!command || command === '--help' || command === '-h') {
         printUsage();
@@ -107,12 +101,12 @@ migrateLegacyJsonData(() => {
 
     switch (command) {
         case 'add': {
+            const argument = process.argv[3];
             if (!argument) {
                 console.error(`❌ Error: Please specify a task name. E.g., ${BIN_NAME} add "Buy milk"`);
                 process.exit(1);
             }
 
-            // Find highest ID to safely assign auto-increment ID
             db.find({}).sort({ id: -1 }).limit(1).exec((err, docs) => {
                 const nextId = docs.length > 0 ? docs[0].id + 1 : 1;
 
@@ -137,13 +131,12 @@ migrateLegacyJsonData(() => {
         }
 
         case 'get': {
-            const fetchId = Number(argument);
+            const fetchId = Number(process.argv[3]);
             if (isNaN(fetchId)) {
                 console.error("❌ Error: Please provide a valid task ID.");
                 process.exit(1);
             }
 
-            // Indexed query: Reads ONLY this single record from disk into memory
             db.findOne({ id: fetchId, deletedAt: null }, (err, task) => {
                 if (task) {
                     console.log("\n📌 Task Details:");
@@ -161,67 +154,99 @@ migrateLegacyJsonData(() => {
         }
 
         case 'list': {
-            const filter = argument ? argument.toLowerCase() : 'all';
+            const args = process.argv.slice(3);
             const validFilters = ['all', 'completed', 'pending', 'deleted'];
 
-            if (!validFilters.includes(filter)) {
-                console.error("❌ Error: Invalid filter. Use 'completed', 'pending', or 'deleted'.");
+            let filter = 'all';
+            let start = 1;
+            let end = 10;
+
+            // Flexible argument parsing
+            if (args.length > 0) {
+                if (validFilters.includes(args[0].toLowerCase())) {
+                    filter = args[0].toLowerCase();
+                    if (args[1] && !isNaN(Number(args[1]))) start = Number(args[1]);
+                    if (args[2] && !isNaN(Number(args[2]))) end = Number(args[2]);
+                } else if (!isNaN(Number(args[0]))) {
+                    start = Number(args[0]);
+                    if (args[1] && !isNaN(Number(args[1]))) end = Number(args[1]);
+                } else {
+                    console.error("❌ Error: Invalid filter or index range arguments.");
+                    process.exit(1);
+                }
+            }
+
+            // Input validation for indices
+            if (start < 1) start = 1;
+            if (end < start) {
+                console.error("❌ Error: 'end' index must be greater than or equal to 'start' index.");
                 process.exit(1);
             }
 
-            // Build query filter
+            // Calculate offset and limit for NeDB
+            const skipCount = start - 1;
+            const limitCount = end - start + 1;
+
+            // Build base query
             let query = {};
             if (filter === 'deleted') {
-                // $ne = Not Equal. Fetch documents where deletedAt is NOT null
                 query = { deletedAt: { $ne: null } };
             } else {
-                // For active lists, ignore soft-deleted tasks
                 query.deletedAt = null;
                 if (filter === 'completed') query.completed = true;
                 if (filter === 'pending') query.completed = false;
             }
 
-            db.find(query).sort({ id: 1 }).exec((err, tasks) => {
-                const headerText = filter === 'deleted' ? '🗑️ --- DELETED TASKS  ---' : '📋 --- TASKS ---';
-                console.log(`\n${headerText}`);
+            // Execute query with skip() and limit() pagination
+            db.find(query)
+                .sort({ id: 1 })
+                .skip(skipCount)
+                .limit(limitCount)
+                .exec((err, tasks) => {
+                    if (err) {
+                        console.error("❌ Database query error:", err.message);
+                        process.exit(1);
+                    }
 
-                const RESET = "\x1b[0m";
-                const GREEN = "\x1b[32m";
-                const RED = "\x1b[31m";
+                    const headerText = filter === 'deleted' ? '🗑️ --- DELETED TASKS (TRASH) ---' : '📋 --- TASKS ---';
+                    console.log(`\n${headerText} (Showing ${start} to ${end})`);
 
-                if (tasks.length === 0) {
-                    console.log("No tasks found.");
-                } else {
-                    tasks.forEach(task => {
-                        const idStr = ` ${task.id}`.padEnd(6);
-                        const formattedTask = formatTaskText(`"${task.text}"`, 35);
-                        
-                        if (filter === 'deleted') {
-                            const deletedDate = new Date(task.deletedAt).toLocaleDateString();
-                            console.log(`${idStr} ${formattedTask}  -  ${RED}Deleted: ${deletedDate}${RESET}`);
-                        } else {
-                            const statusColor = task.completed ? GREEN : RED;
-                            const statusText = task.completed ? "Completed" : "Pending";
-                            const coloredStatus = `${statusColor}${statusText}${RESET}`;
-                            const dateStr = new Date(task.createdAt).toLocaleDateString();
+                    const RESET = "\x1b[0m";
+                    const GREEN = "\x1b[32m";
+                    const RED = "\x1b[31m";
 
-                            console.log(`${idStr} ${formattedTask}  -  ${coloredStatus}  (Created: ${dateStr})`);
-                        }
-                    });
-                }
-                console.log("---------------------------------------");
-            });
+                    if (tasks.length === 0) {
+                        console.log("No tasks found in this range.");
+                    } else {
+                        tasks.forEach(task => {
+                            const idStr = ` ${task.id}`.padEnd(6);
+                            const formattedTask = formatTaskText(`"${task.text}"`, 35);
+                            
+                            if (filter === 'deleted') {
+                                const deletedDate = new Date(task.deletedAt).toLocaleDateString();
+                                console.log(`${idStr} ${formattedTask}  -  ${RED}Deleted: ${deletedDate}${RESET}`);
+                            } else {
+                                const statusColor = task.completed ? GREEN : RED;
+                                const statusText = task.completed ? "Completed" : "Pending";
+                                const coloredStatus = `${statusColor}${statusText}${RESET}`;
+                                const dateStr = new Date(task.createdAt).toLocaleDateString();
+
+                                console.log(`${idStr} ${formattedTask}  -  ${coloredStatus}  (Created: ${dateStr})`);
+                            }
+                        });
+                    }
+                    console.log("---------------------------------------");
+                });
             break;
         }
 
         case 'delete': {
-            const deleteId = Number(argument);
+            const deleteId = Number(process.argv[3]);
             if (isNaN(deleteId)) {
                 console.error("❌ Error: Please provide a valid task ID.");
                 process.exit(1);
             }
 
-            // Soft Delete: Sets timestamp on deletedAt instead of removing from DB
             db.update(
                 { id: deleteId, deletedAt: null },
                 { $set: { deletedAt: new Date().toISOString() } },
@@ -239,7 +264,7 @@ migrateLegacyJsonData(() => {
         }
 
         case 'toggle': {
-            const toggleId = Number(argument);
+            const toggleId = Number(process.argv[3]);
             if (isNaN(toggleId)) {
                 console.error("❌ Error: Please provide a valid task ID.");
                 process.exit(1);
