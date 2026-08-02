@@ -1,13 +1,24 @@
 {
   "name": "todo-app",
   "version": "0.2.4",
+  "type": "module",
   "description": "My todo CLI",
-  "main": "todoapp.js",
+  "main": "./src/bin/todo.ts",
   "bin": {
-    "todo": "./todoapp.js"
+    "todo": "./src/bin/todo.ts"
+  },
+  "scripts": {
+    "build": "npx tsc ./src/bin/todo.ts",
+    "start": "node ./dist/bin/todo.js",
+    "dev": "node ./src/bin/todo.ts"
   },
   "dependencies": {
     "@seald-io/nedb": "^4.1.2",
-    "prompt-sync": "^4.2.0"
+    "lowdb": "^7.0.1",
+    "prompt-sync": "^4.2.0",
+    "typescript": "^7.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2"
   }
 }
