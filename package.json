@@ -8,17 +8,21 @@
     "todo": "./src/bin/todo.ts"
   },
   "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
     "build": "npx tsc ./src/bin/todo.ts",
     "start": "node ./dist/bin/todo.js",
     "dev": "node ./src/bin/todo.ts"
   },
   "dependencies": {
-    "@seald-io/nedb": "^4.1.2",
-    "lowdb": "^7.0.1",
+    "drizzle-orm": "^0.45.2",
+    "pg": "^8.22.0",
     "prompt-sync": "^4.2.0",
     "typescript": "^7.0.2"
   },
   "devDependencies": {
-    "@types/node": "^26.1.2"
+    "@types/node": "^26.1.2",
+    "@types/pg": "^8.20.3",
+    "drizzle-kit": "^0.31.10"
   }
 }

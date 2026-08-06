@@ -1,42 +1,62 @@
-import { db, Task } from '../../../config/db.ts';
+import { eq, and, isNull, isNotNull, asc, count } from 'drizzle-orm';
+import { db } from '../../../config/db.ts';
+import { tasks, type Task, type NewTask } from './schema.ts';
 
+export type TaskFilter = 'all' | 'completed' | 'pending' | 'deleted';
 
+export class TodoRepository {
+    async insert(task: NewTask): Promise<Task> {
+        const [inserted] = await db.insert(tasks).values(task).returning();
+        return inserted;
+    }
 
-export function getTaskById(taskId: number): Task | undefined {
-    return db.data.tasks.find(task => task.id === taskId);
+    async findActiveById(id: number): Promise<Task | null> {
+        const [task] = await db.select().from(tasks)
+            .where(and(eq(tasks.id, id), isNull(tasks.deletedAt)));
+        return task ?? null;
+    }
+
+    async findByFilter(filter: TaskFilter, skip: number, limit: number): Promise<Task[]> {
+        return db.select().from(tasks)
+            .where(this.buildFilterCondition(filter))
+            .orderBy(asc(tasks.id))
+            .offset(skip)
+            .limit(limit);
+    }
+
+    async countByFilter(filter: TaskFilter): Promise<number> {
+        const [result] = await db.select({ value: count() }).from(tasks)
+            .where(this.buildFilterCondition(filter));
+        return result.value;
+    }
+
+    async updateFields(id: number, fields: Partial<NewTask>): Promise<number> {
+        const result = await db.update(tasks).set(fields)
+            .where(eq(tasks.id, id))
+            .returning({ id: tasks.id });
+        return result.length;
+    }
+
+    async softDelete(id: number): Promise<boolean> {
+        const result = await db.update(tasks)
+            .set({ deletedAt: new Date() })
+            .where(and(eq(tasks.id, id), isNull(tasks.deletedAt)))
+            .returning({ id: tasks.id });
+        return result.length > 0;
+    }
+
+    async restore(id: number): Promise<boolean> {
+        const result = await db.update(tasks)
+            .set({ deletedAt: null, updatedAt: new Date() })
+            .where(and(eq(tasks.id, id), isNotNull(tasks.deletedAt)))
+            .returning({ id: tasks.id });
+        return result.length > 0;
+    }
+
+    private buildFilterCondition(filter: TaskFilter) {
+        if (filter === 'deleted') return isNotNull(tasks.deletedAt);
+        if (filter === 'completed') return and(isNull(tasks.deletedAt), eq(tasks.completed, true));
+        if (filter === 'pending') return and(isNull(tasks.deletedAt), eq(tasks.completed, false));
+        return isNull(tasks.deletedAt);
+    }
 }
-
-export async function addTask(newTask: Task): Promise<void> {
-    db.data.tasks.push(newTask);
-    await db.write(); // Persists synchronously or asynchronously to the JSON file
-     
-}
-  
-  
-// export class TodoRepository {
-//     async findNextId(): Promise<number> {
-//         const tasks = await db.findAsync<Task>({}).sort({ id: -1 }).limit(1);
-//         return tasks.length > 0 ? tasks[0].id + 1 : 1;
-//     }
-
-//     async insert(task: Task): Promise<Task> {
-//         return db.insertAsync<Task>(task);
-//     }
-
-//     async findOne(query: TaskQuery): Promise<Task | null> {
-//         return db.findOneAsync<Task>(query);
-//     }
-
-//     async find(query: TaskQuery, skip: number, limit: number): Promise<Task[]> {
-//         return db.findAsync<Task>(query).sort({ id: 1 }).skip(skip).limit(limit);
-//     }
-
-//     async count(query: TaskQuery): Promise<number> {
-//         return db.countAsync(query);
-//     }
-
-//     async update(query: TaskQuery, updateData: TaskUpdate): Promise<number> {
-//         const result = await db.updateAsync(query, updateData, {});
-//         return result.numAffected;
-//     }
-// }

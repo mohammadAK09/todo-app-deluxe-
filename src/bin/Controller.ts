@@ -1,12 +1,9 @@
-import { Task } from '../config/db.ts';
 import { TodoService } from '../core/modules/todo-items/service.ts';
+import type { TaskFilter } from '../core/modules/todo-items/repository.ts';
 
 function formatTaskText(text: string, length = 35): string {
     return text.length > length ? text.substring(0, length - 3).concat('...').padEnd(length) : text.padEnd(length);
 }
-
-
-
 
 export class TodoController {
     private service: TodoService;
@@ -16,9 +13,6 @@ export class TodoController {
         this.service = service;
         this.binName = binName;
     }
-
-
-
 
     printUsage(): void {
         console.log(`
@@ -34,21 +28,11 @@ export class TodoController {
         `);
     }
 
-    // todoController.ts
-    async runMigration(): Promise<void> {
-        try {
-            const result = await this.service.migrateLegacyData();
-            if (result.migrated) {
-                console.log(`🔄 Migrated ${result.count} legacy task(s) into todo.db...`);
-                console.log("✅ Migration complete!\n");
-            }
-        } catch (err: any) {
-            console.error("⚠️ Failed to migrate tasks.json:", err.message);
-        }
-    }
-
     async add(taskText: string | undefined): Promise<void> {
-       
+        if (!taskText) {
+            console.error(`❌ Error: Specify a task name.`);
+            process.exit(1);
+        }
         try {
             const doc = await this.service.addTask(taskText);
             console.log(`\n➕ Added task: "${doc.text}" (ID: ${doc.id})`);
@@ -75,11 +59,11 @@ export class TodoController {
 
     async list(args: string[]): Promise<void> {
         const validFilters = ['all', 'completed', 'pending', 'deleted'];
-        let filter = 'all', start = 1, end = 10;
+        let filter: TaskFilter = 'all', start = 1, end = 10;
 
         if (args.length > 0) {
             if (validFilters.includes(args[0].toLowerCase())) {
-                filter = args[0].toLowerCase();
+                filter = args[0].toLowerCase() as TaskFilter;
                 if (args[1] && !isNaN(Number(args[1]))) start = Number(args[1]);
                 if (args[2] && !isNaN(Number(args[2]))) end = Number(args[2]);
             } else if (!isNaN(Number(args[0]))) {

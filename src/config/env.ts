@@ -1,5 +1,12 @@
-import path from 'path';
-import process from 'process';
+import { loadEnvFile } from 'node:process';
+import path from 'node:path';
 
-export const DB_PATH = path.join(process.cwd(), 'todo.db');
-export const OLD_JSON_PATH = path.join(process.cwd(), 'tasks.json');
+const envPath = path.join(import.meta.dirname, '../../.env');
+loadEnvFile(envPath);
+
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+    throw new Error('Missing DATABASE_URL in .env');
+}
+
+export const DATABASE_URL = databaseUrl;

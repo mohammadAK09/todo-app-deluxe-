@@ -8,7 +8,6 @@ const controller = new TodoController(BIN_NAME);
 
 async function main() {
     
-    await controller.runMigration();
 
     const command = process.argv[2];
     if (!command || command === '--help' || command === '-h') {
