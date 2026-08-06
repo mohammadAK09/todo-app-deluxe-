@@ -1,6 +1,6 @@
 {
   "name": "todo-app",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "type": "module",
   "description": "My todo CLI",
   "main": "./src/bin/todo.ts",
