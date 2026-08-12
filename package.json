@@ -10,17 +10,20 @@
   "scripts": {
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "build": "npx tsc ./src/bin/todo.ts",
-    "start": "node ./dist/bin/todo.js",
-    "dev": "node ./src/bin/todo.ts"
+    "build": "npx tsc ./src",
+    "start": "node ./dist/api/server.js",
+    "dev": "node ./src/api/server.ts",
+    "api": "node --watch src/api/server.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",
+    "express": "^5.2.1",
     "pg": "^8.22.0",
     "prompt-sync": "^4.2.0",
     "typescript": "^7.0.2"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^26.1.2",
     "@types/pg": "^8.20.3",
     "drizzle-kit": "^0.31.10"

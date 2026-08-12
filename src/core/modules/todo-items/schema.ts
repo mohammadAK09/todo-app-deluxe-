@@ -9,11 +9,6 @@ export const tasks = pgTable('tasks', {
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
 });
 
-export const users = pgTable ('users', {
-    id: serial('id').primaryKey(),
-    text: text('name').notNull(),
-}
-)
 
 export type Task = typeof tasks.$inferSelect;
 export type NewTask = typeof tasks.$inferInsert;

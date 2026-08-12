@@ -15,6 +15,13 @@
       "when": 1785679328020,
       "tag": "0001_test-migraion",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786265920794,
+      "tag": "0002_icy_masque",
+      "breakpoints": true
     }
   ]
 }
