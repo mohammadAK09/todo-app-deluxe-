@@ -1,4 +1,4 @@
-import { eq, and, isNull, isNotNull, asc, count } from 'drizzle-orm';
+import { eq, and, isNull, isNotNull, asc, gt, lt, count } from 'drizzle-orm';
 import { db } from '../../../config/db.ts';
 import { tasks, type Task, type NewTask } from './schema.ts';
 
@@ -22,13 +22,7 @@ export async function findActiveById(id: number): Promise<Task | null> {
     return task ?? null;
 }
 
-export async function findByFilter(filter: TaskFilter, skip: number, limit: number): Promise<Task[]> {
-    return db.select().from(tasks)
-        .where(buildFilterCondition(filter))
-        .orderBy(asc(tasks.id))
-        .offset(skip)
-        .limit(limit);
-}
+
 
 export async function countByFilter(filter: TaskFilter): Promise<number> {
     const [result] = await db.select({ value: count() }).from(tasks)
@@ -57,4 +51,26 @@ export async function restore(id: number): Promise<boolean> {
         .where(and(eq(tasks.id, id), isNotNull(tasks.deletedAt)))
         .returning({ id: tasks.id });
     return result.length > 0;
+}
+
+
+
+
+export async function findByCursor(filter: TaskFilter, afterId: number | null, limit: number): Promise<Task[]> {
+    const filterCond = buildFilterCondition(filter);
+    const cursorCond = afterId !== null ? gt(tasks.id, afterId) : undefined;
+
+    return db.select()
+        .from(tasks)
+        .where(and(filterCond, cursorCond))
+        .orderBy(asc(tasks.id))
+        .limit(limit);
+}
+
+export async function findByFilter(filter: TaskFilter, skip: number, limit: number): Promise<Task[]> {
+    return db.select().from(tasks)
+        .where(buildFilterCondition(filter))
+        .orderBy(asc(tasks.id))
+        .offset(skip)
+        .limit(limit);
 }
