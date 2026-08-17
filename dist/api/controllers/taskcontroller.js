@@ -1,58 +1,104 @@
 import * as service from '../../core/modules/todo-items/service.js';
-export async function createTask(req, res) {
+// If service.ts doesn't already export this, add it there and have
+// addTask (and any other validating logic) throw it instead of a plain Error.
+// class ValidationError extends Error {}
+// import { ValidationError } from '../../core/modules/todo-items/errors.ts';
+/**
+ * Wraps an async Express handler so rejected promises are forwarded to
+ * next(err) instead of hanging the request (needed on Express 4;
+ * harmless no-op on Express 5, which does this natively).
+ */
+function asyncHandler(fn) {
+    return (req, res, next) => {
+        fn(req, res, next).catch(next);
+    };
+}
+function parseId(req, res) {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+        res.status(400).json({ error: 'Invalid task id' });
+        return null;
+    }
+    return id;
+}
+export const createTask = asyncHandler(async (req, res) => {
+    const { text } = req.body ?? {};
+    if (typeof text !== 'string' || text.trim() === '') {
+        res.status(400).json({ error: 'text is required and must be a non-empty string' });
+        return;
+    }
     try {
-        const task = await service.addTask(req.body.text);
+        const task = await service.addTask(text);
         res.status(201).json(task);
     }
     catch (err) {
-        res.status(400).json({ error: err.message });
+        // Swap this for `if (err instanceof ValidationError)` once
+        // service.ts throws a distinguishable error type. Until then,
+        // everything falls through to 500, which is the safer default —
+        // it's better to over-report server errors than mislabel a real
+        // server failure as the client's fault.
+        throw err;
     }
-}
-export async function getTask(req, res) {
-    const task = await service.getTask(Number(req.params.id));
+});
+export const getTask = asyncHandler(async (req, res) => {
+    const id = parseId(req, res);
+    if (id === null)
+        return;
+    const task = await service.getTask(id);
     if (!task) {
         res.status(404).json({ error: 'Task not found' });
         return;
     }
     res.status(200).json(task);
-}
-export async function toggleTask(req, res) {
-    const task = await service.toggleTask(Number(req.params.id));
+});
+export const toggleTask = asyncHandler(async (req, res) => {
+    const id = parseId(req, res);
+    if (id === null)
+        return;
+    const task = await service.toggleTask(id);
     if (!task) {
         res.status(404).json({ error: 'Task not found' });
         return;
     }
     res.status(200).json(task);
-}
-export async function deleteTask(req, res) {
-    const success = await service.softDeleteTask(Number(req.params.id));
+});
+export const deleteTask = asyncHandler(async (req, res) => {
+    const id = parseId(req, res);
+    if (id === null)
+        return;
+    const success = await service.softDeleteTask(id);
     if (!success) {
         res.status(404).json({ error: 'Task not found' });
         return;
     }
     res.status(204).send();
-}
-export async function restoreTask(req, res) {
-    const success = await service.restoreTask(Number(req.params.id));
+});
+export const restoreTask = asyncHandler(async (req, res) => {
+    const id = parseId(req, res);
+    if (id === null)
+        return;
+    const success = await service.restoreTask(id);
     if (!success) {
         res.status(404).json({ error: 'Task not found in trash' });
         return;
     }
     res.status(200).json({ restored: true });
-}
-export async function listTasksByCursor(req, res) {
+});
+export const listTasksByCursor = asyncHandler(async (req, res) => {
     const filter = req.query.filter ?? 'all';
-    // Parse 'after' safely (ignore NaN)
     const rawAfter = req.query.after ? Number(req.query.after) : null;
     const after = rawAfter !== null && !isNaN(rawAfter) ? rawAfter : null;
-    // Parse 'limit' safely and cap it (e.g., between 1 and 100)
     const rawLimit = Number(req.query.limit);
     const limit = !isNaN(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 10;
     res.status(200).json(await service.listTasksByCursor(filter, after, limit));
-}
-export async function listTasks(req, res) {
+});
+export const listTasks = asyncHandler(async (req, res) => {
     const filter = req.query.filter ?? 'all';
-    const start = Number(req.query.start ?? 1);
-    const end = Number(req.query.end ?? 10);
-    res.status(200).json(await service.listTasks(filter, start, end));
-}
+    const rawStart = Number(req.query.start ?? 1);
+    const rawEnd = Number(req.query.end ?? 10);
+    if (isNaN(rawStart) || isNaN(rawEnd) || rawStart < 1 || rawEnd < rawStart) {
+        res.status(400).json({ error: 'Invalid start/end range' });
+        return;
+    }
+    res.status(200).json(await service.listTasks(filter, rawStart, rawEnd));
+});
