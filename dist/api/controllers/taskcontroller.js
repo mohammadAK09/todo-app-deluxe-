@@ -21,6 +21,7 @@ function parseId(req, res) {
     }
     return id;
 }
+
 export const createTask = asyncHandler(async (req, res) => {
     const { text } = req.body ?? {};
     if (typeof text !== 'string' || text.trim() === '') {
