@@ -4,4 +4,4 @@ tasks.json.bak
 .env
 tasks.json
 node_modules/
-dist
+dist/
