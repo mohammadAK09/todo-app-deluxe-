@@ -9,7 +9,7 @@ import {
     deleteTask,
     restoreTask,
     toggleTask
-} from '../bin/controller.ts';
+} from './controller.ts';
 import { closeDb } from '../config/db.ts';
 
 const BIN_NAME = path.basename(process.argv[1]).replace(/\.(ts|js)$/, '');
