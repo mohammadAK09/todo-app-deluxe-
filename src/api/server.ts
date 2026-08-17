@@ -1,9 +1,9 @@
 import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
-import { tasksRouter } from './routes/tasks.ts';
-import { closeDb } from '../config/db.ts';
-import { API_PORT} from '../config/env.ts';
+import { tasksRouter } from './routes/tasks.js';
+import { closeDb } from '../config/db.js';
+import { API_PORT} from '../config/env.js';
 
 // Read version from package.json
 const packageJsonPath = path.join(import.meta.dirname, '../../package.json');

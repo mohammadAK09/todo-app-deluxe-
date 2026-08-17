@@ -7,7 +7,7 @@ import {
     deleteTask,
     restoreTask,
     listTasksByCursor,
-} from '../controllers/taskcontroller.ts';
+} from '../controllers/taskcontroller.js';
 
 export const tasksRouter = Router();
 

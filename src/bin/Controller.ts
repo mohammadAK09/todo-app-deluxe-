@@ -1,5 +1,5 @@
-import * as service from '../core/modules/todo-items/service.ts';
-import type { TaskFilter } from '../core/modules/todo-items/repository.ts';
+import * as service from '../core/modules/todo-items/service.js';
+import type { TaskFilter } from '../core/modules/todo-items/repository.js';
 import path from 'node:path';
 import fs from 'node:fs';
 

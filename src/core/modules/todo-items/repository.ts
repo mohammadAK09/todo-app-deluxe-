@@ -1,6 +1,6 @@
 import { eq, and, isNull, isNotNull, asc, gt, lt, count } from 'drizzle-orm';
-import { db } from '../../../config/db.ts';
-import { tasks, type Task, type NewTask } from './schema.ts';
+import { db } from '../../../config/db.js';
+import { tasks, type Task, type NewTask } from './schema.js';
 
 export type TaskFilter = 'all' | 'completed' | 'pending' | 'deleted';
 

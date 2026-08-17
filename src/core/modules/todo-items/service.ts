@@ -1,6 +1,6 @@
-import * as repository from './repository.ts';
-import type { Task } from './schema.ts';
-import type { TaskFilter } from './repository.ts';
+import * as repository from './repository.js';
+import type { Task } from './schema.js';
+import type { TaskFilter } from './repository.js';
 
 export async function addTask(text: string): Promise<Task> {
     const trimmed = text?.trim();

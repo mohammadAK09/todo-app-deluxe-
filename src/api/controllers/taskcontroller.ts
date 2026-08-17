@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
-import * as service from '../../core/modules/todo-items/service.ts';
-import type { TaskFilter } from '../../core/modules/todo-items/repository.ts';
+import * as service from '../../core/modules/todo-items/service.js';
+import type { TaskFilter } from '../../core/modules/todo-items/repository.js';
  
 // If service.ts doesn't already export this, add it there and have
 // addTask (and any other validating logic) throw it instead of a plain Error.
