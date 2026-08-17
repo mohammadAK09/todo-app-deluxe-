@@ -10,7 +10,7 @@
   "scripts": {
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "build": "npx tsc ./src",
+    "build": "tsc",
     "start": "node ./dist/api/server.js",
     "dev": "node ./src/api/server.ts",
     "api": "node --watch src/api/server.ts"
