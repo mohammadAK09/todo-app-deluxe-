@@ -1,14 +1,12 @@
 import { loadEnvFile } from 'node:process';
 import path from 'node:path';
+import fs from 'node:fs';
 
 const envPath = path.join(import.meta.dirname, '../../.env');
 
-try {
+// Only load .env locally — it won't exist on Render, which injects env vars directly
+if (fs.existsSync(envPath)) {
     loadEnvFile(envPath);
-} catch (err) {
-    const isMissingFile = err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT';
-    if (!isMissingFile) throw err;
-    // no .env file found — assume env vars are supplied another way (e.g. a host)
 }
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -17,4 +15,5 @@ if (!databaseUrl) {
 }
 
 export const DATABASE_URL = databaseUrl;
-export const API_PORT = Number(process.env.API_PORT ?? 3000);
+
+export const API_PORT = Number(process.env.PORT ?? process.env.API_PORT ?? 3000);
