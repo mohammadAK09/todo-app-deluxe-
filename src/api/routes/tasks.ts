@@ -12,9 +12,10 @@ import {
 export const tasksRouter = Router();
 
 tasksRouter.post('/', createTask);
+tasksRouter.get('/cursor', listTasksByCursor); 
+
 tasksRouter.patch('/:id/toggle', toggleTask);
 tasksRouter.delete('/:id', deleteTask);
 tasksRouter.post('/:id/restore', restoreTask);
-tasksRouter.get('/cursor', listTasksByCursor); 
 tasksRouter.get('/', listTasks);
 tasksRouter.get('/:id', getTask);
