@@ -9,7 +9,7 @@ if (!databaseUrl) {
 }
 
 export default defineConfig({
-    schema: './src/core/modules/todo-items/schema.ts',
+    schema: './src/core/modules/**/schema.ts',
     out: './drizzle',
     dialect: 'postgresql',
     dbCredentials: {

@@ -1,10 +1,32 @@
-import * as service from '../core/modules/todo-items/service.js';
+import * as service from '../core/modules/todo-items/service.ts';
 import type { TaskFilter } from '../core/modules/todo-items/repository.js';
 import path from 'node:path';
 import fs from 'node:fs';
 
 function formatTaskText(text: string, length = 35): string {
     return text.length > length ? text.substring(0, length - 3).concat('...').padEnd(length) : text.padEnd(length);
+}
+
+/**
+ * Resolves the acting user for this CLI invocation.
+ * Reads `--user <id>` from argv, falling back to CLI_USER_ID in .env.
+ * Exits on failure, so the return type narrows to `number` for callers.
+ */
+function resolveUserId(): number {
+    const flagIndex = process.argv.indexOf('--user');
+    const raw = flagIndex !== -1 ? process.argv[flagIndex + 1] : process.env.CLI_USER_ID;
+
+    const id = Number(raw);
+    if (!Number.isInteger(id) || id <= 0) {
+        console.error(`❌ Error: No user specified. Pass --user <id> or set CLI_USER_ID in .env`);
+        process.exit(1);
+    }
+    return id;
+}
+
+/** Removes `--user <id>` so it doesn't get read as a filter or range value. */
+function stripUserFlag(args: string[]): string[] {
+    return args.filter((arg, i) => arg !== '--user' && args[i - 1] !== '--user');
 }
 
 export function printVersion(): void {
@@ -25,6 +47,9 @@ export function printUsage(binName: string): void {
   ${binName} restore <id>                - Restore soft-deleted task
   ${binName} toggle <id>                 - Toggle task status
   ${binName} version                     - Show app version
+
+  Every command except version acts on one user's tasks.
+  Set CLI_USER_ID in .env, or append --user <id> to any command.
     `);
 }
 
@@ -34,8 +59,9 @@ export async function addTask(taskText: string | undefined): Promise<void> {
         process.exitCode = 1;
         return;
     }
+    const userId = resolveUserId();
     try {
-        const doc = await service.addTask(taskText);
+        const doc = await service.addTask(taskText, userId);
         console.log(`\n➕ Added task: "${doc.text}" (ID: ${doc.id})`);
     } catch (err: any) {
         console.error(`❌ Error: ${err.message}`);
@@ -50,7 +76,8 @@ export async function getTask(idArg: string | undefined): Promise<void> {
         process.exitCode = 1;
         return;
     }
-    const task = await service.getTask(fetchId);
+    const userId = resolveUserId();
+    const task = await service.getTask(fetchId, userId);
     if (task) {
         console.log(`\n📌 Task Details:\n  ID: ${task.id}\n  Text: "${task.text}"\n  Status: ${task.completed ? "Completed" : "Pending"}`);
     } else {
@@ -63,18 +90,24 @@ export async function listTasks(args: string[], binName: string): Promise<void> 
     const validFilters = ['all', 'completed', 'pending', 'deleted'];
     let filter: TaskFilter = 'all', start = 1, end = 10;
 
-    if (args.length > 0) {
-        if (validFilters.includes(args[0].toLowerCase())) {
-            filter = args[0].toLowerCase() as TaskFilter;
-            if (args[1] && !isNaN(Number(args[1]))) start = Number(args[1]);
-            if (args[2] && !isNaN(Number(args[2]))) end = Number(args[2]);
-        } else if (!isNaN(Number(args[0]))) {
-            start = Number(args[0]);
-            if (args[1] && !isNaN(Number(args[1]))) end = Number(args[1]);
+    const positional = stripUserFlag(args);
+
+    if (positional.length > 0) {
+        if (validFilters.includes(positional[0].toLowerCase())) {
+            filter = positional[0].toLowerCase() as TaskFilter;
+            if (positional[1] && !isNaN(Number(positional[1]))) start = Number(positional[1]);
+            if (positional[2] && !isNaN(Number(positional[2]))) end = Number(positional[2]);
+        } else if (!isNaN(Number(positional[0]))) {
+            start = Number(positional[0]);
+            if (positional[1] && !isNaN(Number(positional[1]))) end = Number(positional[1]);
         }
     }
 
-    const { totalCount, tasks } = await service.listTasks(filter, start, end);
+    const userId = resolveUserId();
+
+    // Parameter order inferred from the compiler error — verify against service.ts:40.
+    const { totalCount, tasks } = await service.listTasks(filter, userId, start, end);
+    
     const headerText = filter === 'deleted' ? '🗑️ --- DELETED TASKS ---' : '📋 --- TASKS ---';
 
     const showingStart = totalCount > 0 && start <= totalCount ? start : 0;
@@ -101,7 +134,8 @@ export async function deleteTask(idArg: string | undefined): Promise<void> {
         process.exitCode = 1;
         return;
     }
-    const success = await service.softDeleteTask(id);
+    const userId = resolveUserId();
+    const success = await service.softDeleteTask(id, userId);
     if (success) {
         console.log(`\n🗑️ Soft deleted task ID ${id}`);
     } else {
@@ -117,7 +151,8 @@ export async function restoreTask(idArg: string | undefined): Promise<void> {
         process.exitCode = 1;
         return;
     }
-    const success = await service.restoreTask(id);
+    const userId = resolveUserId();
+    const success = await service.restoreTask(id, userId);
     if (success) {
         console.log(`\n♻️ Restored task ID ${id}`);
     } else {
@@ -133,7 +168,8 @@ export async function toggleTask(idArg: string | undefined): Promise<void> {
         process.exitCode = 1;
         return;
     }
-    const task = await service.toggleTask(id);
+    const userId = resolveUserId();
+    const task = await service.toggleTask(id, userId);
     if (task) {
         console.log(`\n🔄 Status updated to: ${task.completed ? "Completed" : "Pending"}`);
     } else {

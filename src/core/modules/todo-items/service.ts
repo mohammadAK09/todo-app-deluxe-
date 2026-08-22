@@ -2,50 +2,45 @@ import * as repository from './repository.js';
 import type { Task } from './schema.js';
 import type { TaskFilter } from './repository.js';
 
-export async function addTask(text: string): Promise<Task> {
+export async function addTask(text: string, userId: number): Promise<Task> {
     const trimmed = text?.trim();
     if (!trimmed) throw new Error('Task text cannot be empty');
-    return repository.insert({ text: trimmed, completed: false });
+    return repository.insert({ text: trimmed, completed: false, createdBy: userId });
 }
 
-export async function getTask(id: number): Promise<Task | null> {
-    return repository.findActiveById(id);
+export async function getTask(id: number, userId: number): Promise<Task | null> {
+    return repository.findActiveById(id, userId);
 }
 
-
-
-export async function softDeleteTask(id: number): Promise<boolean> {
-    return repository.softDelete(id);
+export async function softDeleteTask(id: number, userId: number): Promise<boolean> {
+    return repository.softDelete(id, userId);
 }
 
-export async function restoreTask(id: number): Promise<boolean> {
-    return repository.restore(id);
+export async function restoreTask(id: number, userId: number): Promise<boolean> {
+    return repository.restore(id, userId);
 }
 
-export async function toggleTask(id: number): Promise<Task | null> {
-    const task = await repository.findActiveById(id);
+export async function toggleTask(id: number, userId: number): Promise<Task | null> {
+    const task = await repository.findActiveById(id, userId);
     if (!task) return null;
     const newStatus = !task.completed;
-    await repository.updateFields(id, { completed: newStatus, updatedAt: new Date() });
+    const updated = await repository.updateFields(id, userId, { completed: newStatus, updatedAt: new Date() });
+    if (updated === 0) return null; // means it was visible but not owned — can't toggle someone else's task
     return { ...task, completed: newStatus };
 }
 
-
-export async function listTasksByCursor(filter: TaskFilter, afterId: number | null, limit: number) {
-    const rows = await repository.findByCursor(filter, afterId, limit + 1);
+export async function listTasksByCursor(filter: TaskFilter, userId: number, afterId: number | null, limit: number) {
+    const rows = await repository.findByCursor(filter, userId, afterId, limit + 1);
     const hasMore = rows.length > limit;
     const items = hasMore ? rows.slice(0, limit) : rows;
     const nextCursor = hasMore ? items[items.length - 1].id : null;
-
     return { items, nextCursor };
 }
 
-
-
-export async function listTasks(filter: TaskFilter, start: number, end: number) {
+export async function listTasks(filter: TaskFilter, userId: number, start: number, end: number) {
     const skipCount = start - 1;
     const limitCount = end - start + 1;
-    const totalCount = await repository.countByFilter(filter);
-    const tasks = await repository.findByFilter(filter, skipCount, limitCount);
+    const totalCount = await repository.countByFilter(filter, userId);
+    const tasks = await repository.findByFilter(filter, userId, skipCount, limitCount);
     return { totalCount, tasks };
 }
