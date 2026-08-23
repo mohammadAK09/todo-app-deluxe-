@@ -3,7 +3,7 @@ import { users } from '../users/schema.js';
 
 
 
-export const tasks = pgTable('tasks', {
+export const tasks = pgTable('task', {
     id: serial('id').primaryKey(),
     text: text('text').notNull(),
     completed: boolean('completed').notNull().default(false),

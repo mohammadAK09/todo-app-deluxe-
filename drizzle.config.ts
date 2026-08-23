@@ -2,11 +2,11 @@ import { defineConfig } from 'drizzle-kit';
 import { loadEnvFile } from 'node:process';
 
 loadEnvFile();
-
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
     throw new Error('Missing DATABASE_URL in .env');
 }
+console.log(process.env.DATABASE_URL);
 
 export default defineConfig({
     schema: './src/core/modules/**/schema.ts',
