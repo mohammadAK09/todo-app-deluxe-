@@ -1,6 +1,7 @@
 import * as repository from './repository.js';
 import type { Task } from './schema.js';
 import type { TaskFilter } from './repository.js';
+import { ForbiddenError } from '../task-access/service.js';
 
 export async function addTask(text: string, userId: number): Promise<Task> {
     const trimmed = text?.trim();
@@ -12,24 +13,41 @@ export async function getTask(id: number, userId: number): Promise<Task | null> 
     return repository.findActiveById(id, userId);
 }
 
+// Every mutation goes through the same two checks: can the user SEE it,
+// and are they allowed to CHANGE it. Not-found and not-allowed stay distinct.
+async function assertWritable(id: number, userId: number): Promise<void> {
+    if (!(await repository.canWrite(id, userId))) {
+        throw new ForbiddenError('You do not have write access to this task');
+    }
+}
+
 export async function softDeleteTask(id: number, userId: number): Promise<boolean> {
-    return repository.softDelete(id, userId);
+    const task = await repository.findActiveById(id, userId);
+    if (!task) return false;
+    await assertWritable(id, userId);
+    return repository.softDelete(id);
 }
 
 export async function restoreTask(id: number, userId: number): Promise<boolean> {
-    return repository.restore(id, userId);
+    await assertWritable(id, userId);
+    return repository.restore(id);
 }
 
 export async function toggleTask(id: number, userId: number): Promise<Task | null> {
     const task = await repository.findActiveById(id, userId);
     if (!task) return null;
+
+    await assertWritable(id, userId);
+
     const newStatus = !task.completed;
-    const updated = await repository.updateFields(id, userId, { completed: newStatus, updatedAt: new Date() });
-    if (updated === 0) return null; // means it was visible but not owned — can't toggle someone else's task
+    const updated = await repository.updateFields(id, { completed: newStatus, updatedAt: new Date() });
+    if (updated === 0) return null;
     return { ...task, completed: newStatus };
 }
 
-export async function listTasksByCursor(filter: TaskFilter, userId: number, afterId: number | null, limit: number) {
+export async function listTasksByCursor(
+    filter: TaskFilter, userId: number, afterId: number | null, limit: number,
+) {
     const rows = await repository.findByCursor(filter, userId, afterId, limit + 1);
     const hasMore = rows.length > limit;
     const items = hasMore ? rows.slice(0, limit) : rows;

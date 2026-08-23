@@ -36,6 +36,13 @@
       "when": 1787433062030,
       "tag": "0004_mean_network",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787482843857,
+      "tag": "0005_freezing_black_tarantula",
+      "breakpoints": true
     }
   ]
 }
