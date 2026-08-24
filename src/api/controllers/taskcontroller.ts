@@ -1,17 +1,26 @@
 import type { Response } from 'express';
 import * as service from '../../core/modules/todo-items/service.js';
 import * as accessService from '../../core/modules/task-access/service.js';
-import { ForbiddenError } from '../../core/modules/task-access/service.js';
+import { ForbiddenError, ValidationError } from '../../core/errors.js';
 import type { TaskFilter } from '../../core/modules/todo-items/repository.js';
 import type { Permission } from '../../core/modules/task-access/repository.js';
 import type { AuthedRequest } from '../middleware/auth.js';
+
 
 function handleError(err: unknown, res: Response): void {
     if (err instanceof ForbiddenError) {
         res.status(403).json({ error: err.message });
         return;
     }
-    res.status(400).json({ error: err instanceof Error ? err.message : 'Bad request' });
+
+    // Errors we raise deliberately are safe to show; anything else is not.
+    if (err instanceof ValidationError) {
+        res.status(400).json({ error: err.message });
+        return;
+    }
+
+    console.error('Unhandled error:', err);
+    res.status(500).json({ error: 'Something went wrong' });
 }
 
 export async function createTask(req: AuthedRequest, res: Response): Promise<void> {

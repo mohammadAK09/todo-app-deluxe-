@@ -12,7 +12,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "build": "tsc",
-    "start": "drizzle-kit migrate && node ./dist/api/server.js",
+    "start": "node ./dist/api/server.js",
     "dev": "node ./src/api/server.ts",
     "api": "node --watch src/api/server.ts"
   },

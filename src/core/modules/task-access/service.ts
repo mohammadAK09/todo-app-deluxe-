@@ -4,13 +4,7 @@ import { tasks } from '../todo-items/schema.js';
 import * as repository from './repository.js';
 import type { Permission } from './repository.js';
 import type { TaskAccess } from './schema.js';
-
-export class ForbiddenError extends Error {
-    constructor(message = 'Not allowed') {
-        super(message);
-        this.name = 'ForbiddenError';
-    }
-}
+import { ForbiddenError } from '../../errors.js';
 
 export async function grantAccess(
     ownerId: number,

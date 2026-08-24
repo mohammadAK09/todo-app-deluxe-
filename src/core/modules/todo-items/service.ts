@@ -1,11 +1,12 @@
 import * as repository from './repository.js';
 import type { Task } from './schema.js';
 import type { TaskFilter } from './repository.js';
-import { ForbiddenError } from '../task-access/service.js';
+import { ForbiddenError, ValidationError} from '../../errors.js';
+
 
 export async function addTask(text: string, userId: number): Promise<Task> {
     const trimmed = text?.trim();
-    if (!trimmed) throw new Error('Task text cannot be empty');
+    if (!trimmed) throw new ValidationError('Task text cannot be empty');
     return repository.insert({ text: trimmed, completed: false, createdBy: userId });
 }
 
