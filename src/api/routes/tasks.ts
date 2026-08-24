@@ -7,24 +7,29 @@ import {
     deleteTask,
     restoreTask,
     listTasksByCursor,
-    shareAccess,
-    revokeShare,
+    shareTask,
+    unshareTask,
+    listTaskAccess,
     listSharedWithMe,
 } from '../controllers/taskcontroller.js';
 import { requireAuth } from '../middleware/auth.js';
 
 export const tasksRouter = Router();
 
-tasksRouter.use(requireAuth);
+tasksRouter.use(requireAuth); // every route below this line now requires a valid token
 
-tasksRouter.post('/share', shareAccess);
-tasksRouter.delete('/share/:viewerId', revokeShare);
+// Static paths first, so ':id' does not swallow them.
+tasksRouter.get('/cursor', listTasksByCursor);
 tasksRouter.get('/shared-with-me', listSharedWithMe);
 
 tasksRouter.post('/', createTask);
-tasksRouter.patch('/:id/toggle', toggleTask);
-tasksRouter.delete('/:id', deleteTask);
-tasksRouter.post('/:id/restore', restoreTask);
-tasksRouter.get('/cursor', listTasksByCursor);
 tasksRouter.get('/', listTasks);
+
+tasksRouter.post('/:id/share', shareTask);
+tasksRouter.delete('/:id/share/:userId', unshareTask);
+tasksRouter.get('/:id/access', listTaskAccess);
+
+tasksRouter.patch('/:id/toggle', toggleTask);
+tasksRouter.post('/:id/restore', restoreTask);
+tasksRouter.delete('/:id', deleteTask);
 tasksRouter.get('/:id', getTask);

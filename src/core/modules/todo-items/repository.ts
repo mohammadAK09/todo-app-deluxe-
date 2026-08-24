@@ -1,4 +1,4 @@
-import { eq, and, or, isNull, isNotNull, asc, gt, count, inArray, type SQL } from 'drizzle-orm';
+import { eq, and, isNull, isNotNull, asc, gt, count, inArray } from 'drizzle-orm';
 import { db } from '../../../config/db.js';
 import { tasks, type Task, type NewTask } from './schema.js';
 import { taskAccess } from '../task-access/schema.js';
@@ -12,61 +12,51 @@ function buildFilterCondition(filter: TaskFilter) {
     return isNull(tasks.deletedAt);
 }
 
-// Tasks a user may READ: their own, plus anything covered by a grant.
-// Blanket grants (task_id IS NULL) cover every task of that owner.
-// Per-task grants cover exactly one task id.
-async function buildVisibilityCondition(userId: number): Promise<SQL> {
-    const grants = await db
-        .select({ ownerId: taskAccess.ownerId, taskId: taskAccess.taskId })
-        .from(taskAccess)
-        .where(eq(taskAccess.viewerId, userId));
-
-    const blanketOwnerIds = [userId, ...grants.filter((g) => g.taskId === null).map((g) => g.ownerId)];
-    const grantedTaskIds = grants.filter((g) => g.taskId !== null).map((g) => g.taskId as number);
-
-    const byOwner = inArray(tasks.createdBy, blanketOwnerIds);
-    if (grantedTaskIds.length === 0) return byOwner;
-
-    return or(byOwner, inArray(tasks.id, grantedTaskIds))!;
+// task_access is the single source of truth. A user sees exactly the tasks
+// they have a row for — including their own, which is inserted on create.
+function accessibleTaskIds(userId: number) {
+    return db.select({ id: taskAccess.taskId }).from(taskAccess)
+        .where(eq(taskAccess.userId, userId));
 }
 
-// Tasks a user may WRITE: their own, plus anything covered by a 'write' grant.
-export async function canWrite(taskId: number, userId: number): Promise<boolean> {
-    const [task] = await db.select({ createdBy: tasks.createdBy }).from(tasks)
-        .where(eq(tasks.id, taskId));
-    if (!task) return false;
-    if (task.createdBy === userId) return true;
-
-    const [grantRow] = await db.select({ id: taskAccess.id }).from(taskAccess)
-        .where(and(
-            eq(taskAccess.viewerId, userId),
-            eq(taskAccess.ownerId, task.createdBy),
-            eq(taskAccess.permission, 'write'),
-            or(isNull(taskAccess.taskId), eq(taskAccess.taskId, taskId)),
-        ));
-    return Boolean(grantRow);
+function visibleTo(userId: number) {
+    return inArray(tasks.id, accessibleTaskIds(userId));
 }
 
+// Access is all-or-nothing, so reading and writing use the same check.
+export async function hasAccess(taskId: number, userId: number): Promise<boolean> {
+    const [row] = await db.select({ id: taskAccess.id }).from(taskAccess)
+        .where(and(eq(taskAccess.taskId, taskId), eq(taskAccess.userId, userId)));
+    return Boolean(row);
+}
+
+/** Creates the task and the owner's access row together, or neither. */
 export async function insert(task: NewTask): Promise<Task> {
-    const [inserted] = await db.insert(tasks).values(task).returning();
-    return inserted;
+    return db.transaction(async (tx) => {
+        const [inserted] = await tx.insert(tasks).values(task).returning();
+        await tx.insert(taskAccess).values({ taskId: inserted.id, userId: inserted.createdBy });
+        return inserted;
+    });
 }
 
 export async function findActiveById(id: number, userId: number): Promise<Task | null> {
-    const visible = await buildVisibilityCondition(userId);
     const [task] = await db.select().from(tasks)
-        .where(and(eq(tasks.id, id), isNull(tasks.deletedAt), visible));
+        .where(and(eq(tasks.id, id), isNull(tasks.deletedAt), visibleTo(userId)));
+    return task ?? null;
+}
+
+export async function findAnyById(id: number, userId: number): Promise<Task | null> {
+    const [task] = await db.select().from(tasks)
+        .where(and(eq(tasks.id, id), visibleTo(userId)));
     return task ?? null;
 }
 
 export async function countByFilter(filter: TaskFilter, userId: number): Promise<number> {
-    const visible = await buildVisibilityCondition(userId);
     const [result] = await db.select({ value: count() }).from(tasks)
-        .where(and(buildFilterCondition(filter), visible));
+        .where(and(buildFilterCondition(filter), visibleTo(userId)));
     return result.value;
 }
 
-// Authorization happens in the service via canWrite — these are scoped by id only.
 export async function updateFields(id: number, fields: Partial<NewTask>): Promise<number> {
     const result = await db.update(tasks).set(fields)
         .where(eq(tasks.id, id))
@@ -93,11 +83,9 @@ export async function restore(id: number): Promise<boolean> {
 export async function findByCursor(
     filter: TaskFilter, userId: number, afterId: number | null, limit: number,
 ): Promise<Task[]> {
-    const visible = await buildVisibilityCondition(userId);
     const cursorCond = afterId !== null ? gt(tasks.id, afterId) : undefined;
-
     return db.select().from(tasks)
-        .where(and(buildFilterCondition(filter), visible, cursorCond))
+        .where(and(buildFilterCondition(filter), visibleTo(userId), cursorCond))
         .orderBy(asc(tasks.id))
         .limit(limit);
 }
@@ -105,9 +93,8 @@ export async function findByCursor(
 export async function findByFilter(
     filter: TaskFilter, userId: number, skip: number, limit: number,
 ): Promise<Task[]> {
-    const visible = await buildVisibilityCondition(userId);
     return db.select().from(tasks)
-        .where(and(buildFilterCondition(filter), visible))
+        .where(and(buildFilterCondition(filter), visibleTo(userId)))
         .orderBy(asc(tasks.id))
         .offset(skip)
         .limit(limit);

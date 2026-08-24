@@ -1,44 +1,53 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import { db } from '../../../config/db.js';
+import { users } from '../users/schema.js';
+import { tasks } from '../todo-items/schema.js';
 import { taskAccess, type TaskAccess } from './schema.js';
 
-export type Permission = 'read' | 'write';
-
-export async function grant(
-    ownerId: number,
-    viewerId: number,
-    permission: Permission,
-    taskId: number | null,
-): Promise<TaskAccess> {
+export async function grant(taskId: number, userId: number): Promise<TaskAccess | null> {
     const [row] = await db.insert(taskAccess)
-        .values({ ownerId, viewerId, permission, taskId })
-        .onConflictDoUpdate({
-            target: [taskAccess.ownerId, taskAccess.viewerId, taskAccess.taskId],
-            set: { permission },
-        })
+        .values({ taskId, userId })
+        .onConflictDoNothing({ target: [taskAccess.taskId, taskAccess.userId] })
         .returning();
-    return row;
+    return row ?? null;
 }
 
-export async function revoke(
-    ownerId: number,
-    viewerId: number,
-    taskId: number | null,
-): Promise<boolean> {
+export async function revoke(taskId: number, userId: number): Promise<boolean> {
     const rows = await db.delete(taskAccess)
-        .where(and(
-            eq(taskAccess.ownerId, ownerId),
-            eq(taskAccess.viewerId, viewerId),
-            taskId === null ? isNull(taskAccess.taskId) : eq(taskAccess.taskId, taskId),
-        ))
+        .where(and(eq(taskAccess.taskId, taskId), eq(taskAccess.userId, userId)))
         .returning({ id: taskAccess.id });
     return rows.length > 0;
 }
 
-export async function findByOwner(ownerId: number): Promise<TaskAccess[]> {
-    return db.select().from(taskAccess).where(eq(taskAccess.ownerId, ownerId));
+export async function hasAccess(taskId: number, userId: number): Promise<boolean> {
+    const [row] = await db.select({ id: taskAccess.id }).from(taskAccess)
+        .where(and(eq(taskAccess.taskId, taskId), eq(taskAccess.userId, userId)));
+    return Boolean(row);
 }
 
-export async function findByViewer(viewerId: number): Promise<TaskAccess[]> {
-    return db.select().from(taskAccess).where(eq(taskAccess.viewerId, viewerId));
+/** Everyone who can access a task, with the owner flagged. */
+export async function listUsersForTask(taskId: number) {
+    return db
+        .select({
+            userId: users.id,
+            email: users.email,
+            grantedAt: taskAccess.createdAt,
+        })
+        .from(taskAccess)
+        .innerJoin(users, eq(taskAccess.userId, users.id))
+        .where(eq(taskAccess.taskId, taskId));
+}
+
+/** Tasks shared with this user by someone else (excludes their own). */
+export async function listSharedWithUser(userId: number) {
+    return db
+        .select({
+            taskId: tasks.id,
+            text: tasks.text,
+            completed: tasks.completed,
+            ownerId: tasks.createdBy,
+        })
+        .from(taskAccess)
+        .innerJoin(tasks, eq(taskAccess.taskId, tasks.id))
+        .where(and(eq(taskAccess.userId, userId), ne(tasks.createdBy, userId)));
 }

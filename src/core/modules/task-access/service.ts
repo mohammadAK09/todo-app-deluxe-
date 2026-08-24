@@ -1,44 +1,58 @@
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from '../../../config/db.js';
 import { tasks } from '../todo-items/schema.js';
-import * as repository from './repository.js';
-import type { Permission } from './repository.js';
-import type { TaskAccess } from './schema.js';
 import { ForbiddenError } from '../../errors.js';
+import * as repository from './repository.js';
 
-export async function grantAccess(
-    ownerId: number,
-    viewerId: number,
-    permission: Permission,
-    taskId: number | null,
-): Promise<TaskAccess> {
-    if (ownerId === viewerId) {
-        throw new Error('Cannot share with yourself');
+async function findOwner(taskId: number): Promise<number | null> {
+    const [task] = await db.select({ createdBy: tasks.createdBy }).from(tasks)
+        .where(eq(tasks.id, taskId));
+    return task?.createdBy ?? null;
+}
+
+/** Only the owner may share. Returns null if the task does not exist. */
+export async function shareTask(taskId: number, targetUserId: number, requesterId: number) {
+    const ownerId = await findOwner(taskId);
+    if (ownerId === null) return null;
+    if (ownerId !== requesterId) {
+        throw new ForbiddenError('Only the task owner can share it');
+    }
+    if (targetUserId === requesterId) {
+        throw new ForbiddenError('You already have access to this task');
+    }
+    // onConflictDoNothing returns null when the grant already exists.
+    return (await repository.grant(taskId, targetUserId)) ?? { taskId, userId: targetUserId, alreadyShared: true };
+}
+
+/** Only the owner may revoke, and never their own access. */
+export async function unshareTask(taskId: number, targetUserId: number, requesterId: number) {
+    const ownerId = await findOwner(taskId);
+    if (ownerId === null) return null;
+    if (ownerId !== requesterId) {
+        throw new ForbiddenError('Only the task owner can revoke access');
+    }
+    if (targetUserId === ownerId) {
+        throw new ForbiddenError('The owner cannot remove their own access');
+    }
+    return repository.revoke(taskId, targetUserId);
+}
+
+/** Who can access this task. Anyone with access may look. */
+export async function listAccess(taskId: number, requesterId: number) {
+    const ownerId = await findOwner(taskId);
+    if (ownerId === null) return null;
+    if (!(await repository.hasAccess(taskId, requesterId))) {
+        throw new ForbiddenError('You do not have access to this task');
     }
 
-    if (taskId !== null) {
-        const [task] = await db.select({ id: tasks.id }).from(tasks)
-            .where(and(eq(tasks.id, taskId), eq(tasks.createdBy, ownerId)));
-        if (!task) {
-            throw new ForbiddenError('You do not own that task');
-        }
-    }
-
-    return repository.grant(ownerId, viewerId, permission, taskId);
+    const rows = await repository.listUsersForTask(taskId);
+    return {
+        taskId,
+        ownerId,
+        users: rows.map((r) => ({ ...r, isOwner: r.userId === ownerId })),
+    };
 }
 
-export async function revokeAccess(
-    ownerId: number,
-    viewerId: number,
-    taskId: number | null,
-): Promise<boolean> {
-    return repository.revoke(ownerId, viewerId, taskId);
-}
-
-export async function listGrantsIMade(ownerId: number): Promise<TaskAccess[]> {
-    return repository.findByOwner(ownerId);
-}
-
-export async function listGrantsIReceived(viewerId: number): Promise<TaskAccess[]> {
-    return repository.findByViewer(viewerId);
+export async function listSharedWithMe(userId: number) {
+    return repository.listSharedWithUser(userId);
 }
