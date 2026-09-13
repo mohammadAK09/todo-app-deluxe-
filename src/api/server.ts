@@ -1,16 +1,19 @@
 import express from 'express';
+import cors from 'cors';
 import path from 'node:path';
 import fs from 'node:fs';
 import { tasksRouter } from './routes/tasks.js';
 import { authRouter } from './routes/auth.js';
-import { requireAuth } from './middleware/auth.js';   // ← verify the exported name
 import { closeDb } from '../config/db.js';
-import { API_PORT } from '../config/env.js';
+import { API_PORT, CORS_ORIGINS } from '../config/env.js';
 
 const packageJsonPath = path.join(import.meta.dirname, '../../package.json');
 const { version } = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
 
 const app = express();
+
+// Must come before the routes so preflight OPTIONS requests get the headers.
+app.use(cors({ origin: CORS_ORIGINS }));
 app.use(express.json());
 
 // --- Public routes ---

@@ -21,3 +21,8 @@ if (!jwtSecret) {
     throw new Error('Missing JWT_SECRET in .env');
 }
 export const JWT_SECRET = jwtSecret;
+
+export const CORS_ORIGINS = (process.env.CORS_ORIGINS ?? 'http://localhost:5173')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
