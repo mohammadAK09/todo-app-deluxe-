@@ -11,3 +11,7 @@ export async function insert(user: NewUser): Promise<User> {
     const [inserted] = await db.insert(users).values(user).returning();
     return inserted;
 }
+export async function findById(id: number): Promise<User | null> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user ?? null;
+}

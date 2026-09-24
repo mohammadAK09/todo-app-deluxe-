@@ -54,3 +54,16 @@ export async function listTasks(filter: TaskFilter, userId: number, start: numbe
     const tasks = await repository.findByFilter(filter, userId, skipCount, limitCount);
     return { totalCount, tasks };
 }
+
+
+export async function updateTaskText(id: number, text: string, userId: number): Promise<Task | null> {
+    const trimmed = text?.trim();
+    if (!trimmed) throw new ValidationError('Task text cannot be empty');
+
+    const task = await repository.findActiveById(id, userId);
+    if (!task) return null;
+
+    const updated = await repository.updateFields(id, { text: trimmed, updatedAt: new Date() });
+    if (updated === 0) return null;
+    return { ...task, text: trimmed };
+}

@@ -13,9 +13,9 @@
     "db:push": "drizzle-kit push",
     "build": "tsc",
     "start": "node ./dist/api/server.js",
-    "dev": "node ./src/api/server.ts",
-    "api": "node --watch src/api/server.ts"
-  },
+    "dev": "tsx src/api/server.ts",
+    "api": "tsx watch src/api/server.ts"
+},
   "dependencies": {
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
@@ -33,6 +33,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.1.2",
     "@types/pg": "^8.20.3",
-    "drizzle-kit": "^0.31.10"
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.23.13"
   }
 }

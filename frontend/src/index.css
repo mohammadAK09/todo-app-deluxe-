@@ -1,0 +1,196 @@
+:root {
+  --ink: #16181d;
+  --ink-soft: #5c6068;
+  --line: #dfe0e4;
+  --surface: #ffffff;
+  --page: #f4f5f3;
+  --accent: #1f5f4e;
+  --accent-hover: #17493c;
+  --danger: #a32d2d;
+  --radius: 6px;
+
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--page);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+/* --- Boot state --- */
+
+.boot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  color: var(--ink-soft);
+}
+
+/* --- Auth screen --- */
+
+.auth-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.auth-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
+  max-width: 360px;
+  padding: 32px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.auth-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-label {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.field input {
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.field input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+
+.field input:disabled {
+  background: var(--page);
+  color: var(--ink-soft);
+}
+
+/* --- Buttons --- */
+
+.button-primary {
+  padding: 10px 14px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+.button-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.button-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.button-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ink-soft);
+  font-size: 14px;
+  text-align: center;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.button-link:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.button-link:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* --- Messages --- */
+
+.error {
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: var(--radius);
+  background: #fbeaea;
+  color: var(--danger);
+  font-size: 14px;
+}
+
+/* --- App shell --- */
+
+.app-shell {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 40px 24px;
+}
+
+.app-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.app-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.app-header-right {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+
+.user-email {
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+
+.placeholder {
+  margin-top: 32px;
+  color: var(--ink-soft);
+}

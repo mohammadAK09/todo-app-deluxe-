@@ -121,17 +121,20 @@ export async function listTasks(req: AuthedRequest, res: Response): Promise<void
 
 export async function shareTask(req: AuthedRequest, res: Response): Promise<void> {
     const taskId = parseId(req.params.id);
-    const targetUserId = parseId(req.body?.userId);
     if (taskId === null) {
         res.status(400).json({ error: 'Valid task id required' });
         return;
     }
-    if (targetUserId === null) {
-        res.status(400).json({ error: 'Valid userId required in body' });
+    const rawUserId = req.body?.userId;
+    const email = typeof req.body?.email === 'string' ? req.body.email : undefined;
+    const userId = rawUserId !== undefined ? parseId(rawUserId) ?? undefined : undefined;
+
+    if (userId === undefined && !email) {
+        res.status(400).json({ error: 'A userId or email is required in body' });
         return;
     }
     try {
-        const result = await accessService.shareTask(taskId, targetUserId, req.userId!);
+        const result = await accessService.shareTask(taskId, { userId, email }, req.userId!);
         if (result === null) {
             res.status(404).json({ error: 'Task not found' });
             return;
@@ -185,4 +188,23 @@ export async function listTaskAccess(req: AuthedRequest, res: Response): Promise
 
 export async function listSharedWithMe(req: AuthedRequest, res: Response): Promise<void> {
     res.status(200).json(await accessService.listSharedWithMe(req.userId!));
+}
+
+
+export async function updateTask(req: AuthedRequest, res: Response): Promise<void> {
+    const id = parseId(req.params.id);
+    if (id === null) {
+        res.status(400).json({ error: 'Valid task id required' });
+        return;
+    }
+    try {
+        const task = await service.updateTaskText(id, req.body?.text, req.userId!);
+        if (!task) {
+            res.status(404).json({ error: 'Task not found' });
+            return;
+        }
+        res.status(200).json(task);
+    } catch (err) {
+        handleError(err, res);
+    }
 }

@@ -1,8 +1,9 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../../../config/db.js';
 import { tasks } from '../todo-items/schema.js';
-import { ForbiddenError } from '../../errors.js';
+import { ForbiddenError,ValidationError } from '../../errors.js';
 import * as repository from './repository.js';
+import * as userService from '../users/service.js';
 
 async function findOwner(taskId: number): Promise<number | null> {
     const [task] = await db.select({ createdBy: tasks.createdBy }).from(tasks)
@@ -10,17 +11,33 @@ async function findOwner(taskId: number): Promise<number | null> {
     return task?.createdBy ?? null;
 }
 
-/** Only the owner may share. Returns null if the task does not exist. */
-export async function shareTask(taskId: number, targetUserId: number, requesterId: number) {
+/** Only the owner may share. Accepts a userId or an email. Returns null if the task does not exist. */
+export async function shareTask(
+    taskId: number,
+    target: { userId?: number; email?: string },
+    requesterId: number,
+) {
     const ownerId = await findOwner(taskId);
     if (ownerId === null) return null;
     if (ownerId !== requesterId) {
         throw new ForbiddenError('Only the task owner can share it');
     }
+
+    let targetUserId = target.userId ?? null;
+    if (targetUserId === null && target.email) {
+        targetUserId = await userService.findIdByEmail(target.email.trim().toLowerCase());
+        if (targetUserId === null) {
+            throw new ValidationError('No user with that email');
+        }
+    }
+    if (targetUserId === null) {
+        throw new ValidationError('A userId or email is required');
+    }
+
     if (targetUserId === requesterId) {
         throw new ForbiddenError('You already have access to this task');
     }
-    // onConflictDoNothing returns null when the grant already exists.
+
     return (await repository.grant(taskId, targetUserId)) ?? { taskId, userId: targetUserId, alreadyShared: true };
 }
 

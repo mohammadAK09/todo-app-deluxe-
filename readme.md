@@ -40,13 +40,13 @@ todo-app/
 │   │   ├── db.ts
 │   │   └── env.ts           validated environment variables
 │   └── core/
-│       ├── errors.ts        ValidationError, ForbiddenError
+│       ├── errors.ts        ValidationError, ForbiddenError, UnauthorizedError
 │       └── modules/
 │           ├── users/       schema, repository, service
 │           ├── todo-items/  schema, repository, service
 │           └── task-access/ schema, repository, service
 ├── drizzle/                 generated migrations
-└── frontend/                (to be added) React + Vite client
+└── frontend/                React + Vite client (separate npm project)
 ```
  
 **Layering rule:** controllers never touch the database. They call services,
@@ -96,19 +96,22 @@ origins and defaults to the Vite dev server.
  
 ## Authentication
  
-Signup and login both return a JWT. Send it on every `/tasks` request:
+Signup and login both return a JWT. Send it on every protected request:
  
 ```
 Authorization: Bearer <token>
 ```
  
 The token payload is `{ userId }` and expires after 7 days. `requireAuth`
-verifies it and attaches `userId` to the request; every route in `tasks.ts`
-sits behind it.
+verifies it and attaches `userId` to the request. Every route under `/tasks`
+sits behind it, as does `GET /auth/me`.
  
 Failures return `401`:
 - `Missing or invalid Authorization header` — no token, or no `Bearer ` prefix
 - `Invalid or expired token` — signature or expiry check failed
+Clients validate a stored token by calling `GET /auth/me` on startup: `200`
+means the session is live, `401` means clear it and show the login screen.
+ 
 ---
  
 ## CORS
@@ -165,8 +168,17 @@ All responses are JSON. Errors are `{ "error": "message" }`.
 | `POST` | `/auth/signup` | `{ email, password }` | `201 { id, email, token }` |
 | `POST` | `/auth/login` | `{ email, password }` | `200 { id, email, token }` |
  
-Signup returns `400` if the email is taken. Login returns `401` on bad
-credentials.
+Signup returns `400` if the email is taken, `500` if something genuinely broke.
+Login returns `401` on bad credentials.
+ 
+### Session
+ 
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| `GET` | `/auth/me` | — | `200 { id, email }` |
+ 
+Requires a Bearer token. Returns `401` if the token is missing, expired, or
+belongs to a deleted user.
  
 ### Tasks — all require a Bearer token
  
@@ -176,6 +188,7 @@ credentials.
 | `GET` | `/tasks` | `?filter&start&end` | `200 { totalCount, tasks }` |
 | `GET` | `/tasks/cursor` | `?filter&after&limit` | `200 { items, nextCursor }` |
 | `GET` | `/tasks/:id` | — | `200 Task` \| `404` |
+| `PATCH` | `/tasks/:id` | `{ text }` | `200 Task` |
 | `PATCH` | `/tasks/:id/toggle` | — | `200 Task` |
 | `DELETE` | `/tasks/:id` | — | `204` |
 | `POST` | `/tasks/:id/restore` | — | `200 { restored: true }` |
@@ -186,6 +199,9 @@ credentials.
 Offset pagination uses 1-based inclusive `start`/`end` (default 1–10). Cursor
 pagination takes the last seen id as `after` and a `limit` capped at 100
 (default 10); `nextCursor` is `null` on the final page.
+ 
+Editing sends only `{ text }` — empty or whitespace-only text returns `400`.
+Toggling takes no body; the server flips whatever the current state is.
  
 **Task shape**
  
@@ -204,29 +220,33 @@ pagination takes the last seen id as `after` and a `limit` capped at 100
  
 | Method | Path | Body | Returns |
 |---|---|---|---|
-| `POST` | `/tasks/:id/share` | `{ userId }` | `201` |
+| `POST` | `/tasks/:id/share` | `{ email }` or `{ userId }` | `201` |
 | `DELETE` | `/tasks/:id/share/:userId` | — | `204` |
 | `GET` | `/tasks/:id/access` | — | `200 { taskId, ownerId, users }` |
 | `GET` | `/tasks/shared-with-me` | — | `200 [ ... ]` |
+ 
+Share accepts either an email or a numeric id; supply one. Email is the
+practical choice for a UI. An unknown email returns `400`.
  
 Only the owner may share or revoke. Anyone with access may list who else has
 it. `/shared-with-me` returns tasks owned by someone else:
 `{ taskId, text, completed, ownerId }`.
  
-Each entry from `/access` is `{ userId, email, grantedAt, isOwner }`.
+Each entry from `/access` is `{ userId, email, grantedAt, isOwner }` — revoking
+uses the `userId` from that list, so no second lookup is needed.
  
 Re-sharing with a user who already has access returns
 `{ taskId, userId, alreadyShared: true }` rather than failing.
  
-**Access is all-or-nothing.** A user the task is shared with can toggle,
+**Access is all-or-nothing.** A user the task is shared with can edit, toggle,
 delete, and restore it — not just read it. There is no read-only tier.
  
 ### Status codes
  
 | Code | Meaning |
 |---|---|
-| `400` | Bad input — malformed id, empty text, missing field |
-| `401` | Missing, malformed, or expired token |
+| `400` | Bad input — malformed id, empty text, unknown share email |
+| `401` | Missing, malformed, or expired token; bad login credentials |
 | `403` | Authenticated but not permitted (e.g. non-owner sharing) |
 | `404` | Not found, or exists but invisible to you |
 | `500` | Unhandled server error |
@@ -240,15 +260,14 @@ caller, so task ids can't be enumerated.
  
 Things the frontend will run into:
  
-- **No user lookup by email.** Sharing requires a numeric `userId`, which no
-  real user knows. Needs either a lookup endpoint or for share to accept an
-  email.
-- **No `/auth/me`.** On page reload there's no way to validate a stored token
-  or recover the user's email without calling a task endpoint and reading the
-  status code.
-- **No task text editing.** Only `toggle` changes a task after creation.
 - **Cold starts.** Render's free tier sleeps when idle; the first request after
   can take up to ~50 seconds. Loading states need to tolerate that.
-- **Signup errors are flat.** `authcontroller` returns `400` for every thrown
-  error, so a duplicate email and a database outage are indistinguishable to
-  the client.
+- **Email case is inconsistent.** Share lowercases the email before lookup;
+  signup stores it as typed. `Lina@x.com` registered won't be found by
+  `lina@x.com`. Normalizing on signup would fix this.
+- **No refresh tokens.** When the 7-day token expires the user is logged out
+  with no warning — any `401` should bounce them to the login screen.
+- **No read-only sharing.** Access is a single all-or-nothing tier.
+- **Share errors leak registration status.** An unknown email returns a
+  distinct message, which confirms whether an address has an account. An
+  accepted tradeoff here, worth knowing about.

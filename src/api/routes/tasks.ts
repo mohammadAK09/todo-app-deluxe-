@@ -4,6 +4,7 @@ import {
     getTask,
     listTasks,
     toggleTask,
+    updateTask,
     deleteTask,
     restoreTask,
     listTasksByCursor,
@@ -31,5 +32,6 @@ tasksRouter.get('/:id/access', listTaskAccess);
 
 tasksRouter.patch('/:id/toggle', toggleTask);
 tasksRouter.post('/:id/restore', restoreTask);
+tasksRouter.patch('/:id', updateTask);
 tasksRouter.delete('/:id', deleteTask);
 tasksRouter.get('/:id', getTask);
